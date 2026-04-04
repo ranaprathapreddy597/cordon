@@ -79,7 +79,13 @@ manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database connected successfully")
+    except Exception as e:
+        print(f"⚠️  Database connection failed: {e}")
+        print("   The server will start but database operations will fail.")
+        print("   Check your CORDON_DATABASE_URL environment variable.")
     yield
 
 
