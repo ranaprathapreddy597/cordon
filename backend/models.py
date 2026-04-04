@@ -12,6 +12,7 @@ class Run(Base):
     __tablename__ = "runs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     agent_name: Mapped[str] = mapped_column(String(255), index=True)
     environment: Mapped[str] = mapped_column(String(64), default="local")
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -77,3 +78,31 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     run: Mapped[Run] = relationship(back_populates="events")
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(255), default="Default")
+    key_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    key_prefix: Mapped[str] = mapped_column(String(12), default="")
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    metric: Mapped[str] = mapped_column(String(64))  # spend, reliability, risk, errors
+    operator: Mapped[str] = mapped_column(String(8))  # gt, lt, gte, lte, eq
+    threshold: Mapped[float] = mapped_column(Float)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_type: Mapped[str] = mapped_column(String(32), default="webhook")  # webhook, email
+    notify_target: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

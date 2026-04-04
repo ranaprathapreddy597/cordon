@@ -4,8 +4,12 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      CORDON_DATABASE_URL: sqlite:///./backend/data/cordon.db
-      CORDON_CORS_ORIGINS: http://localhost:3000
+      - CORDON_DATABASE_URL=${CORDON_DATABASE_URL:-sqlite:///./backend/data/cordon.db}
+      - CORDON_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - CORDON_AUTH_MODE=${CORDON_AUTH_MODE:-open}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
     ports:
       - "8000:8000"
     volumes:
@@ -16,7 +20,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        NEXT_PUBLIC_CORDON_API_URL: http://localhost:8000
+        NEXT_PUBLIC_CORDON_API_URL: ${NEXT_PUBLIC_CORDON_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:

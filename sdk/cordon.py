@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 import random
 import time
+import functools
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
@@ -12,9 +13,16 @@ import requests
 PRICE_BOOK: dict[tuple[str, str], tuple[float, float]] = {
     ("openai", "gpt-4.1-mini"): (0.40, 1.60),
     ("openai", "gpt-4.1-nano"): (0.10, 0.40),
+    ("openai", "gpt-4.1"): (2.00, 8.00),
     ("openai", "gpt-5-mini"): (0.25, 2.00),
+    ("openai", "gpt-4o"): (2.50, 10.00),
+    ("openai", "gpt-4o-mini"): (0.15, 0.60),
     ("anthropic", "claude-3-5-haiku-latest"): (0.80, 4.00),
     ("anthropic", "claude-sonnet-4-0"): (3.00, 15.00),
+    ("anthropic", "claude-3-5-sonnet-latest"): (3.00, 15.00),
+    ("anthropic", "claude-3-5-haiku-20241022"): (0.80, 4.00),
+    ("google", "gemini-2.0-flash"): (0.10, 0.40),
+    ("google", "gemini-2.5-pro"): (1.25, 10.00),
 }
 
 
@@ -103,6 +111,7 @@ def chaos_from_env() -> ChaosProfile:
 class CordonSession:
     agent_name: str = "agent"
     backend_url: str = field(default_factory=lambda: os.getenv("CORDON_BACKEND_URL", "http://localhost:8000"))
+    api_key: str | None = field(default_factory=lambda: os.getenv("CORDON_API_KEY"))
     provider: str | None = None
     model: str | None = None
     environment: str = field(default_factory=lambda: os.getenv("CORDON_ENVIRONMENT", "local"))
@@ -130,6 +139,12 @@ class CordonSession:
         if self.auto_start:
             self.start()
 
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+        return headers
+
     def start(self) -> str | None:
         payload = {
             "agent_name": self.agent_name,
@@ -151,7 +166,7 @@ class CordonSession:
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         url = f"{self.backend_url.rstrip('/')}{path}"
         try:
-            response = requests.post(url, json=payload, timeout=self.request_timeout)
+            response = requests.post(url, json=payload, headers=self._headers(), timeout=self.request_timeout)
             response.raise_for_status()
             return response.json()
         except requests.RequestException:
@@ -398,4 +413,264 @@ class CordonSession:
             self.complete(status="failed", summary=str(exc))
 
 
+# ---------------------------------------------------------------------------
+# Decorator-based tracing
+# ---------------------------------------------------------------------------
+
+def trace(
+    session: CordonSession | None = None,
+    title: str = "",
+    phase: str = "act",
+):
+    """Decorator to automatically trace a function call as a Cordon event.
+
+    Usage:
+        @cordon.trace(session=my_session, title="Process order")
+        def process_order(order_id: str) -> str:
+            ...
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            _session = session or _global_session
+            if not _session:
+                return func(*args, **kwargs)
+
+            func_title = title or f"Function: {func.__name__}"
+            input_text = f"args={args}, kwargs={kwargs}"
+            start = time.perf_counter()
+            try:
+                result = func(*args, **kwargs)
+                latency = int((time.perf_counter() - start) * 1000)
+                _session.record_event(
+                    "tool_call",
+                    phase=phase,
+                    title=func_title,
+                    prompt=input_text[:500],
+                    response=str(result)[:500] if result else "",
+                    tool_name=func.__name__,
+                    latency_ms=latency,
+                    success=True,
+                )
+                return result
+            except Exception as e:
+                latency = int((time.perf_counter() - start) * 1000)
+                _session.record_event(
+                    "error",
+                    phase=phase,
+                    level="error",
+                    title=f"{func_title} failed",
+                    prompt=input_text[:500],
+                    response=str(e)[:500],
+                    tool_name=func.__name__,
+                    latency_ms=latency,
+                    success=False,
+                )
+                raise
+        return wrapper
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# Global session for simple usage
+# ---------------------------------------------------------------------------
+
+_global_session: CordonSession | None = None
+
+
+def init(
+    agent_name: str = "agent",
+    backend_url: str | None = None,
+    api_key: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    **kwargs,
+) -> CordonSession:
+    """Initialize a global Cordon session.
+
+    Usage:
+        import cordon
+        cordon.init(agent_name="My Agent", provider="openai", model="gpt-4.1-mini")
+    """
+    global _global_session
+    _global_session = CordonSession(
+        agent_name=agent_name,
+        backend_url=backend_url or os.getenv("CORDON_BACKEND_URL", "http://localhost:8000"),
+        api_key=api_key,
+        provider=provider,
+        model=model,
+        **kwargs,
+    )
+    return _global_session
+
+
+def get_session() -> CordonSession | None:
+    return _global_session
+
+
+def shutdown():
+    global _global_session
+    if _global_session:
+        _global_session.complete()
+        _global_session = None
+
+
+# ---------------------------------------------------------------------------
+# OpenAI auto-patcher
+# ---------------------------------------------------------------------------
+
+def patch_openai(session: CordonSession | None = None):
+    """Monkey-patch the OpenAI Python SDK to auto-trace all completions.
+
+    Usage:
+        import cordon
+        cordon.init(agent_name="My Agent")
+        cordon.patch_openai()
+
+        # Now all OpenAI calls are automatically traced
+        client = openai.OpenAI()
+        client.chat.completions.create(...)
+    """
+    try:
+        import openai
+    except ImportError:
+        raise ImportError("openai package not installed. Run: pip install openai")
+
+    _session = session or _global_session
+    if not _session:
+        raise RuntimeError("Call cordon.init() before cordon.patch_openai()")
+
+    original_create = openai.resources.chat.completions.Completions.create
+
+    @functools.wraps(original_create)
+    def patched_create(self_inner, *args, **kwargs):
+        messages = kwargs.get("messages", args[0] if args else [])
+        model_name = kwargs.get("model", "unknown")
+        prompt_text = ""
+        if messages:
+            prompt_text = "\n".join(
+                f"[{m.get('role', 'user')}]: {m.get('content', '')}"
+                for m in messages if isinstance(m, dict)
+            )
+
+        _session.maybe_inject_llm_fault(prompt_text)
+
+        start = time.perf_counter()
+        try:
+            result = original_create(self_inner, *args, **kwargs)
+            latency = int((time.perf_counter() - start) * 1000)
+
+            response_text = ""
+            tokens_in = 0
+            tokens_out = 0
+            if hasattr(result, "choices") and result.choices:
+                response_text = result.choices[0].message.content or ""
+            if hasattr(result, "usage") and result.usage:
+                tokens_in = result.usage.prompt_tokens or 0
+                tokens_out = result.usage.completion_tokens or 0
+
+            _session.record_llm_call(
+                prompt=prompt_text[:1500],
+                response=response_text[:1500],
+                provider="openai",
+                model=model_name,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                latency_ms=latency,
+                success=True,
+            )
+            return result
+        except ChaosInjectedError:
+            raise
+        except Exception as e:
+            latency = int((time.perf_counter() - start) * 1000)
+            _session.record_event(
+                "error",
+                phase="decide",
+                level="error",
+                title="OpenAI call failed",
+                prompt=prompt_text[:500],
+                response=str(e)[:500],
+                provider="openai",
+                model=model_name,
+                latency_ms=latency,
+                success=False,
+            )
+            raise
+
+    openai.resources.chat.completions.Completions.create = patched_create
+
+
+def patch_anthropic(session: CordonSession | None = None):
+    """Monkey-patch the Anthropic Python SDK to auto-trace all completions."""
+    try:
+        import anthropic
+    except ImportError:
+        raise ImportError("anthropic package not installed. Run: pip install anthropic")
+
+    _session = session or _global_session
+    if not _session:
+        raise RuntimeError("Call cordon.init() before cordon.patch_anthropic()")
+
+    original_create = anthropic.resources.messages.Messages.create
+
+    @functools.wraps(original_create)
+    def patched_create(self_inner, *args, **kwargs):
+        messages = kwargs.get("messages", [])
+        model_name = kwargs.get("model", "unknown")
+        prompt_text = "\n".join(
+            f"[{m.get('role', 'user')}]: {m.get('content', '')}" if isinstance(m.get('content'), str)
+            else f"[{m.get('role', 'user')}]: ..."
+            for m in messages if isinstance(m, dict)
+        )
+
+        _session.maybe_inject_llm_fault(prompt_text)
+
+        start = time.perf_counter()
+        try:
+            result = original_create(self_inner, *args, **kwargs)
+            latency = int((time.perf_counter() - start) * 1000)
+
+            response_text = ""
+            tokens_in = 0
+            tokens_out = 0
+            if hasattr(result, "content") and result.content:
+                response_text = result.content[0].text if result.content else ""
+            if hasattr(result, "usage") and result.usage:
+                tokens_in = result.usage.input_tokens or 0
+                tokens_out = result.usage.output_tokens or 0
+
+            _session.record_llm_call(
+                prompt=prompt_text[:1500],
+                response=response_text[:1500],
+                provider="anthropic",
+                model=model_name,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                latency_ms=latency,
+                success=True,
+            )
+            return result
+        except ChaosInjectedError:
+            raise
+        except Exception as e:
+            latency = int((time.perf_counter() - start) * 1000)
+            _session.record_event(
+                "error",
+                phase="decide",
+                level="error",
+                title="Anthropic call failed",
+                prompt=prompt_text[:500],
+                response=str(e)[:500],
+                provider="anthropic",
+                model=model_name,
+                latency_ms=latency,
+                success=False,
+            )
+            raise
+
+    anthropic.resources.messages.Messages.create = patched_create
+
+
+# Aliases
 Cordon = CordonSession

@@ -1,0 +1,24 @@
+# Render Blueprint for Cordon Backend
+services:
+  - type: web
+    name: cordon-api
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CORDON_DATABASE_URL
+        sync: false
+      - key: CORDON_CORS_ORIGINS
+        sync: false
+      - key: CORDON_AUTH_MODE
+        value: open
+      - key: CORDON_ENABLE_REDACTION
+        value: "true"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+    plan: free
+    healthCheckPath: /health

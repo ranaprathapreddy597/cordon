@@ -5,6 +5,12 @@ from sdk.cordon import (
     Cordon,
     CordonSession,
     FinOpsKillSwitchTriggered,
+    init,
+    get_session,
+    shutdown,
+    trace,
+    patch_openai,
+    patch_anthropic,
 )
 
 __all__ = [
@@ -14,4 +20,10 @@ __all__ = [
     "Cordon",
     "CordonSession",
     "FinOpsKillSwitchTriggered",
+    "init",
+    "get_session",
+    "shutdown",
+    "trace",
+    "patch_openai",
+    "patch_anthropic",
 ]

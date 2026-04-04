@@ -81,3 +81,40 @@ class RunCompleteRequest(BaseModel):
     status: Literal["completed", "failed", "killed_by_budget", "stopped"] = "completed"
     summary: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+# --- New schemas for Wave 1-3 features ---
+
+class ApiKeyCreate(BaseModel):
+    name: str = Field(default="Default", min_length=1, max_length=255)
+
+
+class ApiKeyResponse(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    raw_key: str | None = None  # Only returned on creation
+    created_at: str
+    last_used_at: str | None = None
+    revoked: bool = False
+
+
+class AlertRuleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    metric: Literal["spend", "reliability", "risk", "errors", "latency"]
+    operator: Literal["gt", "lt", "gte", "lte", "eq"]
+    threshold: float
+    notify_type: Literal["webhook", "email"] = "webhook"
+    notify_target: str = ""
+
+
+class AlertRuleResponse(BaseModel):
+    id: int
+    name: str
+    metric: str
+    operator: str
+    threshold: float
+    enabled: bool
+    notify_type: str
+    notify_target: str
+    created_at: str

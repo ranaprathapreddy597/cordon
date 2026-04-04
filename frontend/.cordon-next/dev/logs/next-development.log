@@ -1,0 +1,108 @@
+[00:00:26.269] Server  LOG     ✓ Ready in 21.5s
+[00:00:54.541] Server  LOG     ○ Compiling / ...
+[00:02:10.554] Server  ERROR   ⨯ ./app/globals.css:1449:8
+Parsing CSS source code failed
+  1447 |   }
+  1448 | }
+> 1449 | @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+       |        ^
+  1450 | :root {
+  1451 |   --bg: #06090f;
+  1452 |   --bg-elevated: rgba(8, 14, 24, 0.85);
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:02:14.152] Server  LOG     ○ Compiling /_error ...
+[00:02:51.574] Browser ERROR   uncaughtError: Error: ./app/globals.css:1449:8
+Parsing CSS source code failed
+  1447 |   }
+  1448 | }
+> 1449 | @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+       |        ^
+  1450 | :root {
+  1451 |   --bg: #06090f;
+  1452 |   --bg-elevated: rgba(8, 14, 24, 0.85);
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:02:54.455] Server  LOG     ✓ Finished writing to filesystem cache in 24.8s
+[00:03:06.585] Server  LOG     ✓ Finished writing to filesystem cache in 10.5s
+[00:03:28.011] Browser ERROR   ./app/globals.css:1449:8
+Parsing CSS source code failed
+  1447 |   }
+  1448 | }
+> 1449 | @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+       |        ^
+  1450 | :root {
+  1451 |   --bg: #06090f;
+  1452 |   --bg-elevated: rgba(8, 14, 24, 0.85);
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:03:28.012] Browser ERROR   ./app/globals.css:1449:8
+Parsing CSS source code failed
+  1447 |   }
+  1448 | }
+> 1449 | @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+       |        ^
+  1450 | :root {
+  1451 |   --bg: #06090f;
+  1452 |   --bg-elevated: rgba(8, 14, 24, 0.85);
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:03:34.006] Browser LOG     E.C.P. regular inline script execution start.
+[00:03:34.006] Browser LOG     E.C.P. regular inline script execution successfully complete.
+[00:03:34.007] Browser LOG     HTMLAlertWrapper.js loaded
+[01:08:26.209] Browser ERROR   ./app/globals.css:1449:8
+Parsing CSS source code failed
+  1447 |   }
+  1448 | }
+> 1449 | @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+       |        ^
+  1450 | :root {
+  1451 |   --bg: #06090f;
+  1452 |   --bg-elevated: rgba(8, 14, 24, 0.85);
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[01:08:26.209] Browser ERROR   ./app/globals.css:1449:8
+Parsing CSS source code failed
+  1447 |   }
+  1448 | }
+> 1449 | @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+       |        ^
+  1450 | :root {
+  1451 |   --bg: #06090f;
+  1452 |   --bg-elevated: rgba(8, 14, 24, 0.85);
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]

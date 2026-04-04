@@ -2,9 +2,15 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cordon | Agent Reliability Control Plane",
+  title: "Cordon — AI Agent Reliability Control Plane",
   description:
-    "Cordon is an agentic SRE and FinOps sandbox for tracing, chaos testing, and budget-aware AI deployments.",
+    "Trace every tool call, inject chaos, score reliability, and kill runaway spend. The open-source safety layer for AI agents.",
+  keywords: ["AI agents", "observability", "chaos engineering", "FinOps", "reliability", "SRE"],
+  openGraph: {
+    title: "Cordon — AI Agent Reliability Control Plane",
+    description: "The open-source safety layer for AI agents. Trace, test, and protect.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -14,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="bg-grid bg-mesh">{children}</body>
     </html>
   );
 }

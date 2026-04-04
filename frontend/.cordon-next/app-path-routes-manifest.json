@@ -1,0 +1,12 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/dashboard/alerts/page": "/dashboard/alerts",
+  "/dashboard/analytics/page": "/dashboard/analytics",
+  "/dashboard/page": "/dashboard",
+  "/dashboard/runs/[id]/page": "/dashboard/runs/[id]",
+  "/dashboard/runs/page": "/dashboard/runs",
+  "/dashboard/settings/page": "/dashboard/settings",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/"
+}

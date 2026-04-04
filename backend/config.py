@@ -12,7 +12,7 @@ def _default_database_url() -> str:
 
 class Settings:
     app_name = "Cordon Control Plane"
-    version = "0.1.0"
+    version = "1.0.0"
     api_prefix = "/api/v1"
     environment = os.getenv("CORDON_ENVIRONMENT", "development")
     database_url = os.getenv("CORDON_DATABASE_URL", _default_database_url())
@@ -28,6 +28,15 @@ class Settings:
         ).split(",")
         if origin.strip()
     ]
+
+    # Supabase configuration
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+    jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
+
+    # Auth mode: "supabase" for production, "open" for local dev without auth
+    auth_mode = os.getenv("CORDON_AUTH_MODE", "open")
 
 
 settings = Settings()

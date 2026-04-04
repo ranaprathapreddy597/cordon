@@ -1,55 +1,49 @@
-# Cordon
+<p align="center">
+  <strong>🛡️ Cordon</strong>
+  <br />
+  <em>The open-source reliability control plane for AI agents.</em>
+  <br /><br />
+  Trace every tool call · Inject chaos · Score reliability · Kill runaway spend
+</p>
 
-Cordon is an agentic SRE and FinOps control plane for AI agents.
+---
 
-It helps teams:
+## What is Cordon?
 
-- trace model and tool behavior
-- inject chaos into agent workflows before production
-- enforce budget and runtime policies
-- inspect execution timelines and risk signals
-- build toward a hosted enterprise reliability layer without changing the SDK contract
+Cordon is an **Agentic SRE & FinOps sandbox platform**. Instead of deploying AI agents directly to production and hoping for the best, developers connect their agents to Cordon first.
 
-## What is in this repo
+Cordon intercepts every LLM call, tool invocation, and decision — then injects simulated failures to stress-test the agent's error handling. It calculates a reliability score, tracks spend in real-time, and fires a kill switch if the agent exceeds its budget.
 
-- `backend/`: FastAPI control plane with persistence, scoring, redaction, and dashboard APIs
-- `frontend/`: Next.js control plane UI
-- `sdk/`: Python SDK and CLI for local agent instrumentation
-- `customer_agent.py`: demo agent that generates realistic telemetry
+**No other platform combines chaos engineering + FinOps kill switch + agent tracing in one open-source tool.**
 
-## Why this architecture
+## Key Features
 
-The repo is intentionally local-first:
+| Feature | Description |
+|:---|:---|
+| **FinOps Kill Switch** | Set spend, step, and runtime limits. Cordon auto-kills agents that exceed policy. |
+| **Chaos Engineering** | Inject tool failures, LLM outages, latency jitter, and prompt injections. |
+| **Execution Trace** | Full OODA-loop timeline showing every thought, tool call, and cost per step. |
+| **PII Redaction** | Auto-detect and mask emails, phone numbers, credit cards, and secrets. |
+| **Reliability Scoring** | Composite reliability and risk scores with actionable recommendations. |
+| **Time-Travel Replay** | Rewind to any step and see the exact state at that point. |
+| **Run Comparison** | Side-by-side diff of any two runs showing metric deltas. |
+| **Alert Rules** | Custom thresholds for spend, reliability, errors, or latency. |
+| **Compliance Export** | Export runs as JSON or CSV for audit trails and governance. |
+| **API Key Auth** | Secure SDK-to-backend authentication with revocable API keys. |
+| **Analytics Dashboard** | Trend charts, model usage breakdown, status distribution. |
+| **OpenAI Auto-Patch** | Monkey-patches OpenAI/Anthropic SDKs — zero code changes. |
+| **20+ API Endpoints** | Full REST API with WebSocket real-time event streaming. |
 
-- developers keep proprietary agent code on their machine
-- the SDK streams structured telemetry to the control plane
-- the control plane stores runs and events, applies policy logic, and computes reliability signals
-- the frontend reads from the control plane API instead of talking to the database directly
-
-This is the same shape you want long term. Later you can swap SQLite for Postgres, add Redis or Kafka, add auth, and add enterprise audit logs without breaking SDK adopters.
-
-## Current product features
-
-- Budget kill switch by spend, max steps, and runtime
-- Prompt/output redaction for common secrets and PII
-- Chaos profiles for tool failures, LLM outages, latency jitter, and prompt injection
-- Reliability and risk scoring
-- Recommendations generated from run behavior
-- Live dashboard for run list, trace timeline, budget pressure, and run summaries
-- CLI wrapper to run local Python scripts with policy controls
-
-## Local development
+## Quick Start
 
 ### 1. Start the backend
 
 ```bash
 python -m venv .venv
-. .venv/Scripts/activate
+.venv\Scripts\activate          # Windows
 pip install -r backend/requirements.txt
 uvicorn backend.server:app --reload
 ```
-
-The backend stores data in `backend/data/cordon.db` by default.
 
 ### 2. Start the frontend
 
@@ -59,8 +53,6 @@ npm install
 npm run dev
 ```
 
-By default the UI expects the backend at `http://localhost:8000`.
-
 ### 3. Run the demo agent
 
 ```bash
@@ -68,56 +60,100 @@ pip install -r sdk/requirements.txt
 python customer_agent.py
 ```
 
-Or use the CLI:
+Open **http://localhost:3000** to see the dashboard.
+
+### 4. Use the CLI
 
 ```bash
 python -m sdk.cli doctor
 python -m sdk.cli run customer_agent.py --agent-name "Support Agent" --chaos-enabled --tool-error-rate 0.2
 ```
 
-## Environment variables
+## SDK Usage
 
-### Backend
+### Simple (3 lines)
 
-- `CORDON_DATABASE_URL`: defaults to a local SQLite database
-- `CORDON_CORS_ORIGINS`: comma-separated allowed origins
-- `CORDON_DEFAULT_BUDGET_LIMIT_USD`
-- `CORDON_DEFAULT_MAX_STEPS`
-- `CORDON_DEFAULT_RUNTIME_LIMIT_SECONDS`
-- `CORDON_ENABLE_REDACTION`
+```python
+import cordon
+cordon.init(agent_name="My Agent", provider="openai", model="gpt-4.1-mini")
+cordon.patch_openai()
 
-### Frontend
+# All OpenAI calls are now auto-traced, costed, and budget-protected
+```
 
-- `NEXT_PUBLIC_CORDON_API_URL`
+### Context Manager
 
-### SDK / CLI
+```python
+from sdk.cordon import CordonSession
 
-- `CORDON_BACKEND_URL`
-- `CORDON_AGENT_NAME`
-- `CORDON_PROVIDER`
-- `CORDON_MODEL`
-- `CORDON_BUDGET_LIMIT_USD`
-- `CORDON_MAX_STEPS`
-- `CORDON_MAX_RUNTIME_SECONDS`
-- `CORDON_CHAOS_ENABLED`
-- `CORDON_CHAOS_TOOL_ERROR_RATE`
-- `CORDON_CHAOS_LLM_ERROR_RATE`
-- `CORDON_CHAOS_LATENCY_JITTER_MS`
-- `CORDON_CHAOS_PROMPT_INJECTION_RATE`
+with CordonSession(agent_name="My Bot", provider="openai", model="gpt-4.1-mini") as session:
+    session.trace("Summarize this document", response="Summary generated.")
+    session.record_tool_call("search", input_text="query", output_text="results")
+```
 
-## Deploy path
+### Decorator
 
-This repo is ready for a pragmatic MVP deploy path:
+```python
+import cordon
 
-1. Deploy `backend` to Railway, Render, Fly.io, or any container host.
-2. Set `CORDON_DATABASE_URL` to a managed Postgres instance.
-3. Deploy `frontend` to Vercel and point `NEXT_PUBLIC_CORDON_API_URL` to the backend URL.
-4. Publish the SDK as a package once the API contract is stable.
+session = cordon.init(agent_name="Pipeline")
 
-## Recommended next milestones
+@cordon.trace(session=session, title="Process Order")
+def process_order(order_id: str) -> str:
+    return f"Processed {order_id}"
+```
 
-1. Add authentication and organizations.
-2. Add Postgres migrations and background jobs.
-3. Add queue-based event ingestion for high-volume telemetry.
-4. Add provider-native integrations for OpenAI, Anthropic, and LangGraph callbacks.
-5. Add evaluation runners, replay, and compliance exports.
+## Architecture
+
+```
+Developer Machine                  Cordon Cloud
+┌─────────────┐                   ┌──────────────────┐
+│  AI Agent    │                   │  Next.js Frontend│
+│  + Cordon SDK│──── REST API ───→│  (Vercel)        │
+│              │                   ├──────────────────┤
+│  pip install │                   │  FastAPI Backend │
+│  cordon      │──── API Key  ───→│  (Render)        │
+└─────────────┘                   ├──────────────────┤
+                                  │  PostgreSQL      │
+                                  │  (Supabase)      │
+                                  └──────────────────┘
+```
+
+## Deploy (Free)
+
+| Service | Platform | Cost |
+|:---|:---|:---|
+| Frontend | **Vercel** | Free |
+| Backend | **Render** | Free |
+| Database | **Supabase** | Free (500MB) |
+
+### Steps
+
+1. Push code to GitHub
+2. **Frontend**: Import repo in [Vercel](https://vercel.com). Set root directory to `frontend`. Add env: `NEXT_PUBLIC_CORDON_API_URL=https://your-backend.onrender.com`
+3. **Backend**: Import repo in [Render](https://render.com). Use the `render.yaml` blueprint, or manually set build command to `pip install -r backend/requirements.txt` and start command to `uvicorn backend.server:app --host 0.0.0.0 --port $PORT`
+4. **Database**: Create a [Supabase](https://supabase.com) project. Copy the connection string to `CORDON_DATABASE_URL` in Render env vars
+
+## Environment Variables
+
+| Variable | Description | Default |
+|:---|:---|:---|
+| `CORDON_DATABASE_URL` | Database connection string | SQLite (local) |
+| `CORDON_AUTH_MODE` | `open` or `supabase` | `open` |
+| `CORDON_CORS_ORIGINS` | Allowed frontend origins | `localhost:3000` |
+| `CORDON_ENABLE_REDACTION` | Auto-redact PII | `true` |
+| `CORDON_API_KEY` | SDK authentication key | — |
+| `CORDON_BUDGET_LIMIT_USD` | Default budget per run | `3.0` |
+| `CORDON_CHAOS_ENABLED` | Enable chaos injection | `false` |
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, Tailwind CSS 4, Recharts, Framer Motion
+- **Backend**: Python, FastAPI, SQLAlchemy, WebSocket
+- **Database**: SQLite (dev) / PostgreSQL (prod)
+- **SDK**: Python with auto-patching for OpenAI, Anthropic
+- **Auth**: Supabase Auth (JWT + API keys)
+
+## License
+
+MIT

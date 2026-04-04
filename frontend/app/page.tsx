@@ -1,625 +1,314 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
-  Cpu,
+  ArrowRight,
+  BarChart3,
+  Binary,
+  BookOpen,
+  Code2,
+  Copy,
+  GitBranch,
+  Globe,
+  Layers,
   Shield,
   Sparkles,
+  Terminal,
   Timer,
   Wallet,
   Zap,
 } from "lucide-react";
+import { motion } from "framer-motion";
+import { useState } from "react";
 
-type MetricBlock = {
-  total_runs: number;
-  active_runs: number;
-  total_spend_usd: number;
-  average_reliability_score: number;
-  chaos_events: number;
-  errors: number;
-  high_risk_runs: number;
-  kill_switch_saves: number;
+import type { Easing } from "framer-motion";
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.08, duration: 0.5, ease: "easeOut" as Easing },
+  }),
 };
 
-type RunSummary = {
-  id: string;
-  agent_name: string;
-  environment: string;
-  provider: string | null;
-  model: string | null;
-  status: string;
-  budget_limit_usd: number;
-  max_steps: number;
-  spend_total_usd: number;
-  event_count: number;
-  llm_calls: number;
-  tool_calls: number;
-  error_count: number;
-  chaos_events: number;
-  pii_events: number;
-  max_latency_ms: number;
-  reliability_score: number;
-  risk_score: number;
-  kill_switch_reason: string | null;
-  summary: string;
-  recommendations: string[];
-  tags: string[];
-  created_at: string;
-  completed_at: string | null;
-};
+export default function LandingPage() {
+  const [copied, setCopied] = useState(false);
 
-type EventItem = {
-  id: number;
-  sequence: number;
-  event_type: string;
-  phase: string;
-  level: string;
-  title: string;
-  prompt: string;
-  response: string;
-  tool_name: string | null;
-  provider: string | null;
-  model: string | null;
-  latency_ms: number;
-  cost_usd: number;
-  tokens_in: number;
-  tokens_out: number;
-  success: boolean;
-  pii_detected: boolean;
-  chaos_applied: boolean;
-  chaos_strategy: string | null;
-  risk_label: string | null;
-  created_at: string;
-};
-
-type OverviewPayload = {
-  metrics: MetricBlock;
-  recent_runs: RunSummary[];
-};
-
-const API_URL =
-  process.env.NEXT_PUBLIC_CORDON_API_URL ?? "http://localhost:8000";
-
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-});
-
-function classForStatus(status: string): string {
-  if (status === "running") {
-    return "border-emerald-400/25 bg-emerald-400/10 text-emerald-300";
-  }
-  if (status === "killed_by_budget") {
-    return "border-rose-400/25 bg-rose-400/10 text-rose-300";
-  }
-  if (status === "failed") {
-    return "border-orange-400/25 bg-orange-400/10 text-orange-300";
-  }
-  return "border-slate-400/20 bg-slate-400/10 text-slate-200";
-}
-
-function classForRisk(score: number): string {
-  if (score >= 65) {
-    return "text-rose-300";
-  }
-  if (score >= 35) {
-    return "text-orange-300";
-  }
-  return "text-teal-300";
-}
-
-function formatDate(value: string | null): string {
-  if (!value) {
-    return "In progress";
-  }
-  return new Date(value).toLocaleString();
-}
-
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
-}
-
-export default function Home() {
-  const [overview, setOverview] = useState<OverviewPayload | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedRun, setSelectedRun] = useState<RunSummary | null>(null);
-  const [events, setEvents] = useState<EventItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchOverview = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/v1/dashboard/overview`);
-        if (!response.ok) {
-          throw new Error(`Control plane returned ${response.status}`);
-        }
-        const data: OverviewPayload = await response.json();
-        if (!isMounted) {
-          return;
-        }
-        setOverview(data);
-        setSelectedRunId((current) => current ?? data.recent_runs[0]?.id ?? null);
-        setError(null);
-      } catch (fetchError) {
-        if (!isMounted) {
-          return;
-        }
-        const message =
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Unable to reach the Cordon API.";
-        setError(message);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchOverview();
-    const interval = window.setInterval(fetchOverview, 5000);
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedRunId) {
-      setSelectedRun(null);
-      setEvents([]);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchRun = async () => {
-      try {
-        const [runResponse, eventsResponse] = await Promise.all([
-          fetch(`${API_URL}/api/v1/runs/${selectedRunId}`),
-          fetch(`${API_URL}/api/v1/runs/${selectedRunId}/events?limit=120`),
-        ]);
-
-        if (!runResponse.ok || !eventsResponse.ok) {
-          throw new Error("Unable to load run details.");
-        }
-
-        const runPayload = (await runResponse.json()) as { run: RunSummary };
-        const eventPayload = (await eventsResponse.json()) as { items: EventItem[] };
-
-        if (!isMounted) {
-          return;
-        }
-
-        setSelectedRun(runPayload.run);
-        setEvents(eventPayload.items);
-      } catch (fetchError) {
-        if (!isMounted) {
-          return;
-        }
-        const message =
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Unable to load run details.";
-        setError(message);
-      }
-    };
-
-    fetchRun();
-    const interval = window.setInterval(fetchRun, 4000);
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, [selectedRunId]);
-
-  const spendRatio = useMemo(() => {
-    if (!selectedRun || selectedRun.budget_limit_usd <= 0) {
-      return 0;
-    }
-    return Math.min(
-      (selectedRun.spend_total_usd / selectedRun.budget_limit_usd) * 100,
-      100,
-    );
-  }, [selectedRun]);
+  const copyInstall = () => {
+    navigator.clipboard.writeText("pip install cordon");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
-    <main className="min-h-screen px-5 py-6 text-slate-50 md:px-8 lg:px-10">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="panel-strong relative overflow-hidden rounded-[28px] px-6 py-7 md:px-8">
-          <div className="absolute -right-20 top-0 h-60 w-60 rounded-full bg-teal-400/10 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-56 w-56 rounded-full bg-orange-400/10 blur-3xl" />
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.28em] text-slate-300">
-                <Shield className="h-3.5 w-3.5 text-teal-300" />
-                Agent Reliability Control Plane
-              </div>
-              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">
-                Cordon helps AI agents fail safely before they fail in public.
-              </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 md:text-base">
-                Trace every tool call, inject chaos, score reliability, and kill
-                runaway spend before it becomes a FinOps incident. Designed to run
-                free on your laptop now and grow into a production control plane later.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 text-sm text-slate-300">
-              <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 font-mono">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-                  API Endpoint
-                </div>
-                <div className="mt-2 break-all text-xs text-teal-200">{API_URL}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-                  Focus
-                </div>
-                <div className="mt-2 text-sm text-slate-100">
-                  FinOps kill switch, chaos testing, trace visibility, and deploy-ready APIs.
-                </div>
-              </div>
-            </div>
+    <main className="min-h-screen">
+      {/* --- Navigation --- */}
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#06090f]/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2.5">
+            <Shield className="h-6 w-6 text-teal-400" />
+            <span className="text-lg font-bold tracking-tight">Cordon</span>
           </div>
-        </section>
-
-        {error ? (
-          <section className="panel rounded-3xl border-rose-400/25 px-6 py-5 text-sm text-rose-200">
-            Unable to sync with the backend: {error}. Start the FastAPI server on
-            <span className="font-mono"> {API_URL}</span> and refresh the page.
-          </section>
-        ) : null}
-
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            icon={<Activity className="h-5 w-5 text-teal-300" />}
-            label="Active Runs"
-            value={overview?.metrics.active_runs ?? 0}
-            detail={`${overview?.metrics.total_runs ?? 0} total runs tracked`}
-          />
-          <MetricCard
-            icon={<Wallet className="h-5 w-5 text-orange-300" />}
-            label="Cloud Spend"
-            value={currency.format(overview?.metrics.total_spend_usd ?? 0)}
-            detail={`${overview?.metrics.kill_switch_saves ?? 0} kill-switch saves`}
-          />
-          <MetricCard
-            icon={<Zap className="h-5 w-5 text-teal-300" />}
-            label="Avg Reliability"
-            value={formatPercent(overview?.metrics.average_reliability_score ?? 0)}
-            detail={`${overview?.metrics.chaos_events ?? 0} chaos injections logged`}
-          />
-          <MetricCard
-            icon={<AlertTriangle className="h-5 w-5 text-rose-300" />}
-            label="High-Risk Runs"
-            value={overview?.metrics.high_risk_runs ?? 0}
-            detail={`${overview?.metrics.errors ?? 0} total errors observed`}
-          />
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.1fr_1.9fr]">
-          <div className="panel rounded-[28px] p-4 md:p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                  Recent Runs
-                </div>
-                <h2 className="mt-2 text-2xl font-semibold">Fleet Snapshot</h2>
-              </div>
-              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                Polling every 5s
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {(overview?.recent_runs ?? []).map((run) => {
-                const selected = run.id === selectedRunId;
-                return (
-                  <button
-                    key={run.id}
-                    type="button"
-                    onClick={() => setSelectedRunId(run.id)}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${
-                      selected
-                        ? "border-teal-300/40 bg-teal-300/10"
-                        : "border-white/8 bg-slate-950/30 hover:border-white/16 hover:bg-white/5"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-lg font-semibold">{run.agent_name}</div>
-                        <div className="mt-1 text-xs uppercase tracking-[0.24em] text-slate-400">
-                          {run.environment} · {run.provider ?? "custom"} · {run.model ?? "unknown"}
-                        </div>
-                      </div>
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] ${classForStatus(
-                          run.status,
-                        )}`}
-                      >
-                        {run.status.replaceAll("_", " ")}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                      <RunMiniMetric label="Spend" value={currency.format(run.spend_total_usd)} />
-                      <RunMiniMetric label="Reliability" value={formatPercent(run.reliability_score)} />
-                      <RunMiniMetric label="Risk" value={formatPercent(run.risk_score)} />
-                    </div>
-                  </button>
-                );
-              })}
-
-              {!loading && (overview?.recent_runs.length ?? 0) === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/12 bg-slate-950/35 px-4 py-6 text-sm text-slate-300">
-                  No runs yet. Start the backend, then run the demo agent with
-                  <span className="font-mono"> python customer_agent.py</span>.
-                </div>
-              ) : null}
-            </div>
+          <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
+            <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
+            <a href="#sdk" className="hover:text-white transition-colors">SDK</a>
           </div>
-
-          <div className="flex flex-col gap-6">
-            <section className="panel rounded-[28px] p-5 md:p-6">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-3xl">
-                  <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                    Run Details
-                  </div>
-                  <h2 className="mt-2 text-3xl font-semibold">
-                    {selectedRun?.agent_name ?? "Select a run"}
-                  </h2>
-                  <p className="mt-3 text-sm leading-7 text-slate-300">
-                    {selectedRun?.summary ??
-                      "Pick a run to inspect budget pressure, recommendations, and full execution traces."}
-                  </p>
-                </div>
-
-                {selectedRun ? (
-                  <div
-                    className={`rounded-full border px-3 py-2 text-xs uppercase tracking-[0.18em] ${classForStatus(
-                      selectedRun.status,
-                    )}`}
-                  >
-                    {selectedRun.status.replaceAll("_", " ")}
-                  </div>
-                ) : null}
-              </div>
-
-              {selectedRun ? (
-                <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <InsightCard
-                      icon={<Cpu className="h-4 w-4 text-teal-300" />}
-                      title="Reliability"
-                      value={formatPercent(selectedRun.reliability_score)}
-                      helper={`${selectedRun.llm_calls} LLM calls · ${selectedRun.tool_calls} tool calls`}
-                    />
-                    <InsightCard
-                      icon={<AlertTriangle className={`h-4 w-4 ${classForRisk(selectedRun.risk_score)}`} />}
-                      title="Risk"
-                      value={formatPercent(selectedRun.risk_score)}
-                      helper={`${selectedRun.error_count} errors · ${selectedRun.pii_events} PII flags`}
-                    />
-                    <InsightCard
-                      icon={<Timer className="h-4 w-4 text-orange-300" />}
-                      title="Tail Latency"
-                      value={`${selectedRun.max_latency_ms} ms`}
-                      helper={formatDate(selectedRun.completed_at)}
-                    />
-                    <InsightCard
-                      icon={<Wallet className="h-4 w-4 text-orange-300" />}
-                      title="Spend"
-                      value={currency.format(selectedRun.spend_total_usd)}
-                      helper={`Budget ${currency.format(selectedRun.budget_limit_usd)}`}
-                    />
-                  </div>
-
-                  <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4">
-                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-slate-400">
-                      <span>Budget Pressure</span>
-                      <span>{spendRatio.toFixed(0)}%</span>
-                    </div>
-                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/8">
-                      <div
-                        className={`h-full rounded-full ${
-                          spendRatio >= 85
-                            ? "bg-rose-400"
-                            : spendRatio >= 65
-                              ? "bg-orange-400"
-                              : "bg-teal-400"
-                        }`}
-                        style={{ width: `${spendRatio}%` }}
-                      />
-                    </div>
-                    <div className="mt-5 text-xs uppercase tracking-[0.24em] text-slate-400">
-                      Recommendations
-                    </div>
-                    <div className="mt-3 space-y-3">
-                      {selectedRun.recommendations.map((item) => (
-                        <div
-                          key={item}
-                          className="rounded-2xl border border-white/8 bg-white/4 px-3 py-3 text-sm leading-6 text-slate-200"
-                        >
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-              <div className="panel rounded-[28px] p-5 md:p-6">
-                <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-slate-400">
-                  <Sparkles className="h-4 w-4 text-teal-300" />
-                  Deployment Notes
-                </div>
-                <div className="space-y-3 text-sm leading-7 text-slate-300">
-                  <p>
-                    Cordon is built as a local-first control plane. The agent stays
-                    on the developer machine while the SDK streams structured telemetry
-                    to the backend.
-                  </p>
-                  <p>
-                    This lets you add Postgres, Redis, queues, or hosted auth later
-                    without changing the SDK contract developers adopt today.
-                  </p>
-                  <p>
-                    Current run tags:
-                    <span className="ml-2 font-mono text-teal-200">
-                      {selectedRun?.tags.join(", ") || "none"}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="panel rounded-[28px] p-5 md:p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
-                      Live Trace
-                    </div>
-                    <h3 className="mt-2 text-2xl font-semibold">Execution Timeline</h3>
-                  </div>
-                  <div className="rounded-full border border-teal-300/15 bg-teal-300/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-teal-200">
-                    PII firewall on
-                  </div>
-                </div>
-                <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
-                  {events.map((event) => (
-                    <div
-                      key={event.id}
-                      className="rounded-2xl border border-white/8 bg-slate-950/35 p-4"
-                    >
-                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div className="text-sm font-semibold text-slate-100">
-                          {event.title}
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                          <span>#{event.sequence}</span>
-                          <span>{event.event_type.replaceAll("_", " ")}</span>
-                          <span>{new Date(event.created_at).toLocaleTimeString()}</span>
-                        </div>
-                      </div>
-                      <div className="mt-3 grid gap-2 text-sm text-slate-300">
-                        {event.prompt ? (
-                          <div>
-                            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                              Input
-                            </span>
-                            <p className="mt-1 whitespace-pre-wrap break-words">{event.prompt}</p>
-                          </div>
-                        ) : null}
-                        {event.response ? (
-                          <div>
-                            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                              Output
-                            </span>
-                            <p className="mt-1 whitespace-pre-wrap break-words">{event.response}</p>
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        <span className="rounded-full border border-white/10 px-2 py-1">
-                          {event.phase}
-                        </span>
-                        <span className="rounded-full border border-white/10 px-2 py-1">
-                          {event.latency_ms} ms
-                        </span>
-                        <span className="rounded-full border border-white/10 px-2 py-1">
-                          {currency.format(event.cost_usd)}
-                        </span>
-                        {event.chaos_applied ? (
-                          <span className="rounded-full border border-orange-400/20 bg-orange-400/10 px-2 py-1 text-orange-200">
-                            chaos
-                          </span>
-                        ) : null}
-                        {event.pii_detected ? (
-                          <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-rose-200">
-                            pii redacted
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-
-                  {!selectedRunId ? (
-                    <div className="rounded-2xl border border-dashed border-white/12 bg-slate-950/35 px-4 py-6 text-sm text-slate-300">
-                      No run selected yet.
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </section>
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="btn-secondary text-sm">
+              Dashboard
+            </Link>
           </div>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function MetricCard({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  detail: string;
-}) {
-  return (
-    <div className="panel metric-glow rounded-[24px] p-5">
-      <div className="flex items-center justify-between">
-        <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
-          {label}
         </div>
-        <div>{icon}</div>
-      </div>
-      <div className="mt-4 text-3xl font-semibold tracking-tight">{value}</div>
-      <div className="mt-2 text-sm text-slate-300">{detail}</div>
-    </div>
-  );
-}
+      </nav>
 
-function InsightCard({
-  icon,
-  title,
-  value,
-  helper,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  helper: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4">
-      <div className="flex items-center gap-2 text-sm text-slate-200">
-        {icon}
-        <span>{title}</span>
-      </div>
-      <div className="mt-4 text-2xl font-semibold">{value}</div>
-      <div className="mt-2 text-sm text-slate-400">{helper}</div>
-    </div>
-  );
-}
+      {/* --- Hero --- */}
+      <section className="relative pt-32 pb-20 px-6 overflow-hidden">
+        <div className="absolute top-20 left-1/4 w-[500px] h-[500px] bg-teal-500/8 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-40 right-1/4 w-[400px] h-[400px] bg-violet-500/6 rounded-full blur-[100px] pointer-events-none" />
 
-function RunMiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/8 bg-white/4 px-3 py-3">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-        {label}
-      </div>
-      <div className="mt-2 text-sm font-semibold text-slate-100">{value}</div>
-    </div>
+        <motion.div
+          className="mx-auto max-w-4xl text-center relative z-10"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+        >
+          <motion.div variants={fadeUp} custom={0} className="inline-flex items-center gap-2 rounded-full border border-teal-400/20 bg-teal-400/8 px-4 py-1.5 text-xs font-medium tracking-widest uppercase text-teal-300 mb-8">
+            <Sparkles className="h-3.5 w-3.5" />
+            Open Source · Agentic SRE · FinOps
+          </motion.div>
+
+          <motion.h1 variants={fadeUp} custom={1} className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.1] bg-gradient-to-b from-white via-white to-slate-400 bg-clip-text text-transparent">
+            Crash-test your AI agents before they crash your business
+          </motion.h1>
+
+          <motion.p variants={fadeUp} custom={2} className="mt-6 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            Cordon is the open-source reliability control plane for AI agents.
+            Trace every tool call, inject chaos, score reliability, and kill runaway
+            spend — all before your agent touches production.
+          </motion.p>
+
+          <motion.div variants={fadeUp} custom={3} className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/dashboard" className="btn-primary text-base px-7 py-3.5">
+              Open Dashboard
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <button onClick={copyInstall} className="btn-secondary text-base px-6 py-3.5 font-mono">
+              <Terminal className="h-4 w-4" />
+              pip install cordon
+              {copied ? (
+                <span className="text-teal-400 text-xs ml-1">Copied!</span>
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-slate-500 ml-1" />
+              )}
+            </button>
+          </motion.div>
+
+          {/* Stats bar */}
+          <motion.div variants={fadeUp} custom={4} className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
+            {[
+              { value: "3 Lines", label: "To Integrate SDK" },
+              { value: "$0", label: "Infrastructure Cost" },
+              { value: "20+", label: "API Endpoints" },
+              { value: "100%", label: "Open Source" },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="text-2xl font-bold text-white">{stat.value}</div>
+                <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{stat.label}</div>
+              </div>
+            ))}
+          </motion.div>
+        </motion.div>
+      </section>
+
+      {/* --- Features Grid --- */}
+      <section id="features" className="py-24 px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center mb-16">
+            <div className="text-xs font-medium tracking-[0.25em] uppercase text-teal-400 mb-4">Platform Features</div>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Everything your agents need to fail safely</h2>
+            <p className="mt-4 text-slate-400 max-w-xl mx-auto">No other platform combines chaos engineering, FinOps protection, and agent tracing in one open-source tool.</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[
+              { icon: <Wallet className="h-5 w-5" />, color: "text-orange-400", title: "FinOps Kill Switch", desc: "Set spend limits. Cordon auto-kills your agent the moment it exceeds budget — preventing $10K OpenAI bills overnight." },
+              { icon: <Zap className="h-5 w-5" />, color: "text-rose-400", title: "Chaos Engineering", desc: "Inject fake API failures, network timeouts, and prompt injections to stress-test your agent's error handling." },
+              { icon: <Activity className="h-5 w-5" />, color: "text-teal-400", title: "Execution Trace", desc: "Full OODA-loop timeline showing every thought, tool call, and decision your agent makes — with cost per step." },
+              { icon: <Shield className="h-5 w-5" />, color: "text-violet-400", title: "PII Redaction", desc: "Automatic detection and masking of emails, phone numbers, credit cards, and secrets in prompts and responses." },
+              { icon: <BarChart3 className="h-5 w-5" />, color: "text-blue-400", title: "Reliability Scoring", desc: "Every run gets a composite reliability score and risk assessment with actionable recommendations." },
+              { icon: <Timer className="h-5 w-5" />, color: "text-orange-400", title: "Time-Travel Replay", desc: "Rewind to any step in your agent's execution. See the exact state, spend, and error count at each point." },
+              { icon: <AlertTriangle className="h-5 w-5" />, color: "text-rose-400", title: "Alert Rules", desc: "Set custom thresholds for spend, reliability, errors, or latency. Get notified before problems escalate." },
+              { icon: <Layers className="h-5 w-5" />, color: "text-teal-400", title: "Run Comparison", desc: "Side-by-side diff of any two runs. See exactly what changed between agent versions or configurations." },
+              { icon: <Globe className="h-5 w-5" />, color: "text-violet-400", title: "Export & Compliance", desc: "Export runs as JSON or CSV for audit trails. SOC2-ready compliance logs for enterprise AI governance." },
+            ].map((feature) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4 }}
+                className="panel rounded-2xl p-6 hover:border-white/15 transition-all group"
+              >
+                <div className={`${feature.color} mb-4`}>{feature.icon}</div>
+                <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">{feature.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- How It Works --- */}
+      <section id="how-it-works" className="py-24 px-6 border-t border-white/5">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center mb-16">
+            <div className="text-xs font-medium tracking-[0.25em] uppercase text-teal-400 mb-4">How It Works</div>
+            <h2 className="text-4xl font-bold tracking-tight">Three lines. Full observability.</h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                step: "01",
+                title: "Install the SDK",
+                desc: "Add Cordon to your project with pip install cordon. Works with any Python agent framework.",
+                icon: <Code2 className="h-5 w-5 text-teal-400" />,
+              },
+              {
+                step: "02",
+                title: "Patch your LLM",
+                desc: "Call cordon.patch_openai() to auto-trace all API calls. Zero code changes to your agent.",
+                icon: <Binary className="h-5 w-5 text-violet-400" />,
+              },
+              {
+                step: "03",
+                title: "Watch the dashboard",
+                desc: "See every event, cost, and reliability score in real-time on the Cordon web dashboard.",
+                icon: <BarChart3 className="h-5 w-5 text-orange-400" />,
+              },
+            ].map((item) => (
+              <motion.div
+                key={item.step}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: parseInt(item.step) * 0.1 }}
+                className="relative"
+              >
+                <div className="text-6xl font-black text-white/5 absolute -top-4 -left-2">{item.step}</div>
+                <div className="relative z-10 pt-8">
+                  <div className="mb-3">{item.icon}</div>
+                  <h3 className="text-xl font-bold mb-2">{item.title}</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">{item.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- SDK Code Example --- */}
+      <section id="sdk" className="py-24 px-6 border-t border-white/5">
+        <div className="mx-auto max-w-5xl">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="text-xs font-medium tracking-[0.25em] uppercase text-teal-400 mb-4">Developer Experience</div>
+              <h2 className="text-4xl font-bold tracking-tight mb-4">Two lines to instrument. Zero to maintain.</h2>
+              <p className="text-slate-400 leading-relaxed mb-6">
+                Cordon auto-patches OpenAI and Anthropic SDKs. Every call is traced, costed, and
+                protected by your budget policy. If the agent goes rogue, the kill switch fires.
+              </p>
+              <div className="space-y-3 text-sm">
+                {[
+                  "Auto-patch OpenAI, Anthropic, and Google SDKs",
+                  "@cordon.trace decorator for custom functions",
+                  "Budget kill switch with 3 configurable limits",
+                  "Chaos injection for resilience testing",
+                  "API key auth for secure cloud deployments",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-2.5 text-slate-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="code-block text-[13px]">
+              <div className="text-slate-500 mb-3"># That&apos;s it. 3 lines. Full observability.</div>
+              <div><span className="keyword">import</span> cordon</div>
+              <div><span className="keyword">import</span> openai</div>
+              <br />
+              <div className="text-slate-500"># Initialize Cordon with your agent name</div>
+              <div>cordon.<span className="func">init</span>(</div>
+              <div>    <span className="string">agent_name</span>=<span className="string">&quot;Customer Support Bot&quot;</span>,</div>
+              <div>    <span className="string">provider</span>=<span className="string">&quot;openai&quot;</span>,</div>
+              <div>    <span className="string">model</span>=<span className="string">&quot;gpt-4.1-mini&quot;</span>,</div>
+              <div>)</div>
+              <br />
+              <div className="text-slate-500"># Auto-trace ALL OpenAI calls</div>
+              <div>cordon.<span className="func">patch_openai</span>()</div>
+              <br />
+              <div className="text-slate-500"># Your code stays exactly the same</div>
+              <div>client = openai.<span className="func">OpenAI</span>()</div>
+              <div>response = client.chat.completions.<span className="func">create</span>(</div>
+              <div>    model=<span className="string">&quot;gpt-4.1-mini&quot;</span>,</div>
+              <div>    messages=[&#123;<span className="string">&quot;role&quot;</span>: <span className="string">&quot;user&quot;</span>, <span className="string">&quot;content&quot;</span>: <span className="string">&quot;Hello&quot;</span>&#125;],</div>
+              <div>)</div>
+              <br />
+              <div className="text-teal-400/70"># ✓ Traced  ✓ Costed  ✓ Budget-protected  ✓ PII-redacted</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- CTA --- */}
+      <section className="py-24 px-6 border-t border-white/5">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
+            Stop hoping your agents work.
+            <br />
+            <span className="bg-gradient-to-r from-teal-400 to-violet-400 bg-clip-text text-transparent">Start proving it.</span>
+          </h2>
+          <p className="text-slate-400 mb-10 max-w-lg mx-auto">
+            Open source. Free forever. Built for the developers building the future.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/dashboard" className="btn-primary text-base px-8 py-3.5">
+              Launch Dashboard
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <a
+              href="https://github.com/ranaprathapreddy597/cordon"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary text-base px-6 py-3.5"
+            >
+              <GitBranch className="h-4 w-4" />
+              Star on GitHub
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* --- Footer --- */}
+      <footer className="border-t border-white/5 py-10 px-6">
+        <div className="mx-auto max-w-6xl flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-teal-400" />
+            <span className="font-semibold text-slate-300">Cordon</span>
+            <span>· Agent Reliability Control Plane</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <a href="https://github.com/ranaprathapreddy597/cordon" className="hover:text-white transition-colors">GitHub</a>
+            <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
+          </div>
+        </div>
+      </footer>
+    </main>
   );
 }
